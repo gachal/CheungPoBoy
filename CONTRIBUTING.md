@@ -1,128 +1,128 @@
-# Contributing
+# 贡献指南
 
-Thanks for wanting to contribute.
-One rule up front:
+感谢你有意贡献。
+先说一条规则：
 
-**Human-authored pull requests targeting `main` must be raised through [`no-mistakes`](https://github.com/kunchenguid/no-mistakes).**
-We require this to reduce the maintainer's burden of reviewing and merging contributions.
+**由人类提交的、指向 `main` 的 pull request 必须通过 [`no-mistakes`](https://github.com/kunchenguid/no-mistakes) 提出。**
+我们要求这一点，是为了减轻维护者审查和合并贡献的负担。
 
-`no-mistakes` puts a local git proxy in front of your real remote.
-Pushing through it runs an AI-driven review/test/lint pipeline in an isolated worktree, forwards the push upstream only after every check passes, and opens a clean PR automatically.
+`no-mistakes` 在你的真实远端前面放了一个本地 git 代理。
+通过它推送时，它会在一个隔离的 worktree 里运行 AI 驱动的审查/测试/lint 流水线，全部检查通过后才把推送转发到上游，并自动开出一个干净的 PR。
 
-A GitHub Actions check (`Require no-mistakes`) runs on PRs targeting `main` and requires both the deterministic signature and a parseable structured attestation from no-mistakes v1.46.0 or newer.
-The attestation must bind to the current PR head commit and report the review, test, and document steps as completed, so a stale attestation, a missing `head_sha`, or a skipped required step fails.
-It evaluates every PR opening and body edit independently, reruns after head synchronization or reopening, and prevents a later edit from replacing an earlier pending compliance check.
-GitHub Actions and Dependabot are exempt so their automation keeps working, but other contributor PRs that do not satisfy the attestation contract will not be reviewed or merged.
+一个 GitHub Actions 检查（`Require no-mistakes`）会在指向 `main` 的 PR 上运行，要求同时具备确定性签名和来自 no-mistakes v1.46.0 或更新版本的可解析结构化证明（attestation）。
+该证明必须绑定当前 PR 的 head 提交，并把审查、测试、文档步骤报告为已完成；因此过期的证明、缺失的 `head_sha` 或被跳过的必需步骤都会失败。
+它对每一次 PR 开启和正文编辑独立评估，在 head 同步或重新打开后重跑，并防止后来的编辑替换掉先前待定的合规检查。
+GitHub Actions 和 Dependabot 豁免，它们的自动化照常工作；但不满足该证明契约的其他贡献者 PR 不会被审查或合并。
 
-## Workflow
+## 工作流
 
-1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent (`git@github.com:kunchenguid/firstmate.git`).
-2. Create a branch and make your changes.
-3. Initialize the gate with your fork as the push target: `no-mistakes init --fork-url git@github.com:<you>/firstmate.git` (contributing to firstmate requires **no-mistakes v1.46.0+** for structured attestation; without a fork, plain `no-mistakes init` still works for maintainers with push access).
-4. Commit your changes.
-5. Push through the gate instead of pushing to `origin`:
+1. Fork 本仓库，然后克隆父仓库，或把你本地的 `origin` 指回父仓库（`git@github.com:kunchenguid/firstmate.git`）。
+2. 建分支并完成你的修改。
+3. 以你的 fork 作为推送目标初始化门禁：`no-mistakes init --fork-url git@github.com:<you>/firstmate.git`（向 firstmate 贡献需要 **no-mistakes v1.46.0+** 才能产出结构化证明；没有 fork 时，拥有推送权限的维护者仍可直接 `no-mistakes init`）。
+4. 提交你的修改。
+5. 通过门禁推送，而不是直接推到 `origin`：
 
    ```sh
    git push no-mistakes
    ```
 
-6. Run `no-mistakes` to attach to the pipeline, watch findings, authorize auto-fixes, and review ask-user findings as needed.
-   Follow the installed no-mistakes version's SKILL.md and live `axi` help for gate mechanics.
-7. Once the pipeline passes, it pushes the branch to your fork and opens the PR against the parent repo for you.
+6. 运行 `no-mistakes` 接入流水线，查看发现、授权自动修复，并按需审查 ask-user 发现。
+   门禁机制以已安装 no-mistakes 版本的 SKILL.md 和实时 `axi` 帮助为准。
+7. 流水线通过后，它会替你把分支推到你的 fork，并开出一个指向父仓库的 PR。
 
-See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/start-here/quick-start/) for the full first-run walkthrough.
+完整的首次运行 walkthrough 见 [no-mistakes 快速开始](https://kunchenguid.github.io/no-mistakes/start-here/quick-start/)。
 
-## Repo conventions
+## 仓库约定
 
-- This repo is a template for running a firstmate orchestrator agent.
-  [`AGENTS.md`](AGENTS.md) owns the supervisor contract, role boundary, and bundled firstmate skill triggers; `CLAUDE.md` is a real `@AGENTS.md` pointer to it, and `.claude/skills` is a symlink to `.agents/skills`.
-- Only shared material is tracked: `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `.tasks.toml`, `.github/workflows/`, `bin/`, `.agents/skills/`, and `skills/`.
-  `.agents/skills/` holds agent-loaded skills that assume a live firstmate home and carry `metadata.internal: true` so installers such as [skills.sh](https://skills.sh) hide them from discovery; `skills/` holds standalone, installer-facing public skills with no firstmate dependency (see the README's "Two-tier skill layout").
-  `.claude/mods/` holds Claude Code mods, plugins whose behavior lives in one function-hooks module; each is reached through an `.agents/skills/<mod>` symlink because Claude Code adopts project plugins only from `.claude/skills`, carries no `SKILL.md` so every other harness's skill loader ignores that entry, and imports only files physically inside its own folder because Claude Code refuses anything else.
-  A module may load through `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` or Claude Code's `tengu_plugin_hooks_modules` rollout flag, but the Calm mod activates only when `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` is exactly `1` and is otherwise a complete no-op; Firstmate never sets that variable in any settings file, and [`docs/calm.md`](docs/calm.md) owns the contract.
-  Everything personal to one captain's fleet (`.env`, `data/`, `state/`, `config/`, `projects/`, `.no-mistakes/`) is gitignored; never commit it.
-  The root `.tasks.toml` is tracked `tasks-axi` config for `data/backlog.md`; compatible `tasks-axi` is the default backend for routine backlog mutations, with the compatibility definition owned by [`docs/configuration.md`](docs/configuration.md) ("Backlog backend").
-  A local `config/backlog-backend=manual` opt-out forces firstmate's routine backlog updates to hand-editing and stays gitignored; validated secondmate handoffs still delegate through `tasks-axi mv`.
-  A local `config/backend` file explicitly overrides runtime auto-detection for new task endpoints and stays gitignored; spawn-supported values are `tmux`, `herdr` (which has its own required CI lane), and `zellij`, `orca`, and `cmux`, which remain experimental with no dedicated real-backend CI lane, while `codex-app` is documented only in `docs/codex-app-backend.md`.
-  It does not make `data/` tracked.
-- Helper scripts in `bin/` are plain bash.
-  Each starts with a usage header comment; keep it accurate when you change behavior.
-  Test scripts and helpers in `tests/` are plain bash too.
-  `bin/fm-lint.sh` must pass: it is the single owner of the lint definition (the shellcheck file set, config, pinned shellcheck version, pinned actionlint workflow lint, and the backend-purity check rejecting direct Beads CLI calls in core `bin/` scripts), and both CI and the no-mistakes pre-push gate invoke it with no arguments.
-  Its header and `--help` output own the exact local lint modes, file-set selection, and analysis flags.
-  A malformed `.github/workflows/*.yml`, including a self-broken `ci.yml`, fails that local lint path before merge because a broken workflow cannot report its own breakage.
-  It pins one exact shellcheck version and one exact actionlint version and refuses to run under any other.
-  Print the shellcheck pin with `bin/fm-lint.sh --required-version` and the actionlint pin with `bin/fm-lint-workflows.sh --required-version`.
-  Use `bin/fm-install-shellcheck.sh` and `bin/fm-install-actionlint.sh` to install those exact builds locally; each installer's header owns its destination usage and supported platforms.
-- Harness-adapter ownership spans detection in `bin/fm-harness.sh`, launch and hook mechanics in `bin/fm-spawn.sh`, spawn-time Claude workspace-trust and external-CLAUDE.md-import pre-approval in `bin/fm-claude-trust.sh`, semantic busy sources and trust gates in `bin/fm-busy-lib.sh`, delivery-only rendered guards in `bin/fm-composer-lib.sh`, cleanup in `bin/fm-teardown.sh`, and facts in the skill tree rooted at `.agents/skills/harness-adapters/SKILL.md`; the `firstmate-coding-guidelines` skill owns the validation policy for checks that depend on those harnesses.
-- Changes to runtime session backends (`bin/fm-backend.sh`, `bin/backends/`, and the scripts that dispatch through them) keep current setup and limits in the relevant backend guide and active empirical evidence in [`docs/verification/runtime-backends.md`](docs/verification/runtime-backends.md).
-- [`docs/documentation-audiences.md`](docs/documentation-audiences.md) and its machine-consumed inventory own prose classification; run `bin/fm-doc-audience-check.sh` after documentation changes.
-- In Markdown, put each full sentence on its own line.
-- `README.md` stays a concise overview plus pointers: it never carries a wall of inline detail.
-  Route detail to the most specific `docs/` file (architecture, configuration, or a backend guide) and link to it instead.
+- 本仓库是运行 firstmate 编排代理的模板。
+  [`AGENTS.md`](AGENTS.md) 负责监督契约、角色边界和内置 firstmate 技能的触发点；`CLAUDE.md` 是指向它的真实 `@AGENTS.md` 指针，`.claude/skills` 是指向 `.agents/skills` 的符号链接。
+- 只有共享材料被跟踪：`AGENTS.md`、`README.md`、`CONTRIBUTING.md`、`.tasks.toml`、`.github/workflows/`、`bin/`、`.agents/skills/` 和 `skills/`。
+  `.agents/skills/` 存放由代理加载的技能，它们假设存在一个活跃的 firstmate 主目录，并带有 `metadata.internal: true`，使 [skills.sh](https://skills.sh) 之类的安装器将其从发现中隐藏；`skills/` 存放独立、面向安装器的公开技能，不依赖 firstmate（见 README 的"两层技能布局"）。
+  `.claude/mods/` 存放 Claude Code mods，即行为全部位于一个 function-hooks 模块中的插件；每个 mod 都经由 `.agents/skills/<mod>` 符号链接被访问，因为 Claude Code 只从 `.claude/skills` 采纳项目插件；它们不带 `SKILL.md`，因此其他所有 harness 的技能加载器都会忽略该条目；并且只 import 物理位于自己文件夹内的文件，因为 Claude Code 拒绝其他任何来源。
+  模块可以经由 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 或 Claude Code 的 `tengu_plugin_hooks_modules` 灰度标志加载，但 Calm mod 只在 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS` 恰为 `1` 时激活，其余情况完全是空操作；Firstmate 绝不在任何 settings 文件里设置该变量，契约由 [`docs/calm.md`](docs/calm.md) 负责。
+  一位船长船队的一切私有内容（`.env`、`data/`、`state/`、`config/`、`projects/`、`.no-mistakes/`）都被 gitignore；绝不提交它们。
+  根目录 `.tasks.toml` 是 `data/backlog.md` 的受跟踪 `tasks-axi` 配置；兼容的 `tasks-axi` 是例行 backlog 变更的默认后端，兼容性定义由 [`docs/configuration.md`](docs/configuration.md)（"Backlog backend"）负责。
+  本地 `config/backlog-backend=manual` 选项强制 firstmate 的例行 backlog 更新改为手工编辑，保持 gitignored；经过验证的二副交接仍通过 `tasks-axi mv` 委派。
+  本地 `config/backend` 文件为新任务端点显式覆盖运行时自动检测，保持 gitignored；spawn 支持的值是 `tmux`、`herdr`（有自己的必需 CI 泳道），以及仍属实验性、没有专属真实后端 CI 泳道的 `zellij`、`orca` 和 `cmux`；`codex-app` 仅在 `docs/codex-app-backend.md` 中记录。
+  它不会让 `data/` 变成被跟踪的。
+- `bin/` 中的辅助脚本是纯 bash。
+  每个都以用法头注释开始；行为变更时保持其准确。
+  `tests/` 中的测试脚本和辅助工具也是纯 bash。
+  `bin/fm-lint.sh` 必须通过：它是 lint 定义的唯一所有者（shellcheck 文件集、配置、固定的 shellcheck 版本、固定的 actionlint workflow lint，以及拒绝核心 `bin/` 脚本直接调用 Beads CLI 的后端纯度检查），CI 和 no-mistakes 推送前门禁都不带参数地调用它。
+  其头注释和 `--help` 输出负责确切的本地 lint 模式、文件集选择和分析标志。
+  格式错误的 `.github/workflows/*.yml`（包括自损坏的 `ci.yml`）会在合并前让该本地 lint 路径失败，因为损坏的 workflow 无法报告自身的损坏。
+  它固定一个确切的 shellcheck 版本和一个确切的 actionlint 版本，并拒绝在其他任何版本下运行。
+  用 `bin/fm-lint.sh --required-version` 打印 shellcheck 固定版本，用 `bin/fm-lint-workflows.sh --required-version` 打印 actionlint 固定版本。
+  用 `bin/fm-install-shellcheck.sh` 和 `bin/fm-install-actionlint.sh` 在本地安装这些确切构建；每个安装器的头注释负责其目标位置用法和支持的平台。
+- harness 适配器的所有权分布如下：`bin/fm-harness.sh` 负责检测，`bin/fm-spawn.sh` 负责启动与钩子机制，`bin/fm-claude-trust.sh` 负责 spawn 期的 Claude workspace-trust 与外部 CLAUDE.md import 预批准，`bin/fm-busy-lib.sh` 负责语义忙碌源与信任门，`bin/fm-composer-lib.sh` 负责仅投递的渲染兜底，`bin/fm-teardown.sh` 负责清理，事实则保存在以 `.agents/skills/harness-adapters/SKILL.md` 为根的技能树里；依赖这些 harness 的检查的验证策略由 `firstmate-coding-guidelines` 技能负责。
+- 运行时会话后端（`bin/fm-backend.sh`、`bin/backends/` 及经它们派发的脚本）的变更，把当前设置与限度保留在相关后端指南中，把活跃实证证据保留在 [`docs/verification/runtime-backends.md`](docs/verification/runtime-backends.md)。
+- [`docs/documentation-audiences.md`](docs/documentation-audiences.md) 及其机器消费的清单负责行文分类；文档变更后运行 `bin/fm-doc-audience-check.sh`。
+- 在 Markdown 中，每个完整句子独占一行。
+- `README.md` 保持为简明概述加指针：它绝不携带大段内联细节。
+  细节路由到最具体的 `docs/` 文件（架构、配置或某个后端指南），并改为链接过去。
 
-## Development
+## 开发
 
-Tracked changes to firstmate itself - `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `.tasks.toml`, `.github/workflows/`, `bin/`, `.agents/skills/`, and `skills/` - ship through the `no-mistakes` pipeline on a feature branch and require an explicit merge approval.
-Before making any such change, load the agent-only `firstmate-coding-guidelines` skill (`.agents/skills/firstmate-coding-guidelines/SKILL.md`).
-It has the knowledge-placement rules that keep `AGENTS.md` from regrowing after each diet pass.
-There is no reliable way for `bin/fm-brief.sh`'s scaffold to detect that a task's repo is firstmate itself, so firstmate adds this skill's load line to firstmate-repo briefs by hand.
-A crewmate picking up such a brief should load the skill even if the brief predates this instruction.
-When supervising live crewmates, keep firstmate's own long validation or build commands in the background so watcher wakes can still be handled.
-Crewmate validation follows the installed no-mistakes version's SKILL.md and live `axi` help instead of duplicating gate mechanics in firstmate docs.
-Firstmate's wrapper still matters: crewmates route every `ask-user` finding to firstmate, which applies `ask-user-authority`, and crewmates never pass `--yes` or `-y` because either flag bypasses that check and any required captain escalation.
-[`docs/configuration.md`](docs/configuration.md#gate-defaults-no-mistakesyaml) owns the tracked `.no-mistakes.yaml` gate defaults.
-The `firstmate-coding-guidelines` skill owns the rule that local no-mistakes Test stays intent-targeted rather than configuring `commands.test`.
-Verify the same way the gate does: reach for `bin/fm-test-run.sh` with the subjects you care about rather than chaining `bash tests/a.test.sh && bash tests/b.test.sh`, because a list of script paths gets the same bounded concurrency as `--changed`.
-The pipeline publishes that evidence itself, so never hand-commit `.no-mistakes/` paths onto a feature branch; CI rejects them as tracked personal fleet paths.
+对 firstmate 本身的受跟踪变更 - `AGENTS.md`、`README.md`、`CONTRIBUTING.md`、`.tasks.toml`、`.github/workflows/`、`bin/`、`.agents/skills/` 和 `skills/` - 通过 `no-mistakes` 流水线在特性分支上交付，并需要显式的合并批准。
+做任何此类变更之前，加载仅代理使用的 `firstmate-coding-guidelines` 技能（`.agents/skills/firstmate-coding-guidelines/SKILL.md`）。
+它保有防止 `AGENTS.md` 在每次瘦身之后再膨胀的知识落位规则。
+`bin/fm-brief.sh` 的脚手架没有可靠办法检测某个任务的仓库就是 firstmate 本身，所以 firstmate 亲手把该技能的加载行加进 firstmate 仓库的任务指令。
+领取这类指令的船员即使指令早于本说明，也应加载该技能。
+监督活跃船员时，把 firstmate 自己的长时间验证或构建命令放到后台，让看护唤醒仍能得到处理。
+船员验证遵循已安装 no-mistakes 版本的 SKILL.md 和实时 `axi` 帮助，而不是在 firstmate 文档里复刻门禁机制。
+Firstmate 的包装层仍然重要：船员把每个 ask-user 发现路由给 firstmate，由它应用 `ask-user-authority`；船员绝不传 `--yes` 或 `-y`，因为任一标志都会绕过该检查和任何所需的船长升级。
+[`docs/configuration.md`](docs/configuration.md#gate-defaults-no-mistakesyaml) 负责受跟踪的 `.no-mistakes.yaml` 门禁默认值。
+`firstmate-coding-guidelines` 技能负责"本地 no-mistakes Test 保持意图定向、不配置 `commands.test`"的规则。
+按门禁同样的方式验证：需要什么主题就用 `bin/fm-test-run.sh`，而不是串联 `bash tests/a.test.sh && bash tests/b.test.sh`，因为一串脚本路径获得的与 `--changed` 相同的有界并发。
+流水线会自行发布该证据，因此绝不把 `.no-mistakes/` 路径手动提交到特性分支；CI 会把它们当作被跟踪的私有船队路径予以拒绝。
 
-Check and test the toolbelt before pushing:
+推送前检查并测试工具带：
 
 ```sh
-while IFS= read -r script; do /bin/bash -n "$script" || exit; done < <(bin/fm-lint.sh --list-files)   # syntax-check the shell surface fm-lint.sh will cover (changed files locally, full set in CI/on main)
-bin/fm-lint.sh   # lint that shell surface plus GitHub workflows via pinned actionlint; the single owner CI and the no-mistakes gate both run
-bin/fm-test-run.sh tests/<subject>.test.sh   # one script (primary local focus path, timed)
-bin/fm-test-run.sh tests/<a>.test.sh tests/<b>.test.sh   # several subjects at once: bounded automatic concurrency
-bin/fm-test-run.sh --family pure-contract-unit   # ordinary family-scoped local path (serial, timed)
-bin/fm-test-run.sh --changed   # normal changed-file-informed path with automatic bounded concurrency
-bin/fm-test-run.sh --changed --jobs 1   # explicit serial override
-bin/fm-test-run.sh --changed --max-wall-ms 300000   # same automatic path with a post-run five-minute result check
-bin/fm-test-run.sh --proven-isolated --jobs 4   # explicit local parallel of the individually proven set
-bin/fm-test-run.sh --lane portable-serial   # portable serial remainder (watcher/AFK/tmux/stateful)
-bin/fm-test-run.sh --list-lanes   # discover exact lane names, including the current CI serial shards
-bin/fm-test-run.sh --check-coverage   # prove portable shards + serial + serial shards + Herdr equal the full inventory
-bin/fm-test-run.sh --all   # deliberate complete regression (optional local full walk; not no-mistakes Test)
-bin/fm-test-isolation-proof.sh --list   # proven portable parallel candidate set
-bin/fm-test-isolation-proof.sh --jobs 4 --json /tmp/fm-isolation-proof.json   # re-run the portable candidate proof
-bin/fm-test-isolation-proof.sh --pool watcher-wake-lock --jobs 4   # re-run an admitted family proof
+while IFS= read -r script; do /bin/bash -n "$script" || exit; done < <(bin/fm-lint.sh --list-files)   # 语法检查 fm-lint.sh 将覆盖的 shell 面（本地为变更文件，CI/main 上为全集）
+bin/fm-lint.sh   # lint 该 shell 面外加 GitHub workflows（经固定的 actionlint）；CI 与 no-mistakes 门禁共同运行的唯一所有者
+bin/fm-test-run.sh tests/<subject>.test.sh   # 单个脚本（主要的本地聚焦路径，带计时）
+bin/fm-test-run.sh tests/<a>.test.sh tests/<b>.test.sh   # 多个主题一次跑：自动有界并发
+bin/fm-test-run.sh --family pure-contract-unit   # 常规的家族范围本地路径（串行，带计时）
+bin/fm-test-run.sh --changed   # 常规的按变更文件通知路径，自动有界并发
+bin/fm-test-run.sh --changed --jobs 1   # 显式串行覆盖
+bin/fm-test-run.sh --changed --max-wall-ms 300000   # 同一自动路径，外加运行后五分钟的结果复查
+bin/fm-test-run.sh --proven-isolated --jobs 4   # 对逐一证明过的集合做显式本地并行
+bin/fm-test-run.sh --lane portable-serial   # 可移植串行余量（watcher/AFK/tmux/有状态）
+bin/fm-test-run.sh --list-lanes   # 发现确切泳道名，包括当前 CI 串行分片
+bin/fm-test-run.sh --check-coverage   # 证明可移植分片 + 串行 + 串行分片 + Herdr 等于完整清单
+bin/fm-test-run.sh --all   # 有意的完整回归（可选的本地全量走查；不是 no-mistakes Test）
+bin/fm-test-isolation-proof.sh --list   # 已证明的可移植并行候选集
+bin/fm-test-isolation-proof.sh --jobs 4 --json /tmp/fm-isolation-proof.json   # 重跑可移植候选证明
+bin/fm-test-isolation-proof.sh --pool watcher-wake-lock --jobs 4   # 重跑某个已准入的家族证明
 [ ! -L CLAUDE.md ] && cmp -s CLAUDE.md - <<'EOF'
 <!-- Points Claude at AGENTS.md via import; edit AGENTS.md, not this file. -->
 @AGENTS.md
 EOF
 [ "$(readlink .claude/skills)" = "../.agents/skills" ]
-tmp=$(mktemp -d) && printf 'done: smoke\n' > "$tmp/smoke.status" && FM_STATE_OVERRIDE="$tmp" FM_SIGNAL_GRACE=1 FM_POLL=1 FM_HEARTBEAT=999999 bin/fm-watch-arm.sh  # watcher re-arm smoke test (prints arm status, then an actionable signal)
+tmp=$(mktemp -d) && printf 'done: smoke\n' > "$tmp/smoke.status" && FM_STATE_OVERRIDE="$tmp" FM_SIGNAL_GRACE=1 FM_POLL=1 FM_HEARTBEAT=999999 bin/fm-watch-arm.sh  # 看护重臂冒烟测试（打印布防状态，然后一条可操作的信号）
 ```
 
-`bin/fm-test-run.sh` is the single owner of behavior-suite selection, portable CI lane composition, bounded concurrency admission, per-script timing markers, family totals, the coverage guard, and the optional JSON timing artifact.
-Its header and `--help` own the flags, family labels, lanes, and changed-file map; this section only documents the entry points.
-`bin/fm-test-isolation-proof.sh` remains the single owner of the portable candidate proof and reusable family proof harness; see `docs/fm-test-isolation-proof.md`.
-Portable shard balance evidence lives in `docs/fm-test-portable-shards.md`.
-Family selection is the ordinary local path; `--all` is deliberate full regression only.
-CI owns broad regression across required portable parallel shards, the portable serial lane's separate-runner shards, the Herdr lane, lint, invariants, the coverage guard, and stock macOS Bash compatibility in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-Pushing a new head to a pull request cancels that pull request's still-running CI so only the current head is validated; pushes to `main` are never cancelled, and the workflow owns that contract and its rationale.
-Use `bin/fm-test-run.sh --list-lanes` for exact lane names and `--help` for `--jobs` rules and required gate-skip flags when reproducing a lane locally.
-Leave the `sleep 0.1` cadence in the suites' bounded condition waits alone.
-Those sleeps look like recoverable overhead - `fm-watch-triage.test.sh` alone issues about 1,900 of them, each paying a flat ~100ms scheduler wake-up penalty on macOS - but they are not overhead added to the clock; they are how a test waits for a subject that only moves on `fm-watch.sh`'s own one-second `FM_POLL` cadence.
-Sampling less often does not remove that wait, it only delays detection: raising the interval to 0.5s and charging each sample proportionally measured `fm-watch-triage.test.sh` at 435s and 440s against 390s and 393s for the unchanged script, back to back on 2026-09-03, because each of its ~40 poll-cycle waits and ~73 process-exit waits paid up to half a second more.
-Some of those loops are also catching a transient rather than waiting for a settled condition, so a coarser sample can step over the state they assert on.
-Discover tests by listing `tests/*.test.sh`: each is a self-contained bash script named `<subject>.test.sh`, and its header comment describes what it covers, so pass one to `bin/fm-test-run.sh` to focus on a subject with canonical timing output.
-Shared test helpers live in `tests/lib.sh` (reporters, temp roots, git fixtures), `tests/fixtures.sh` (fake toolchain and spawn-world builders), `tests/wake-helpers.sh`, `tests/secondmate-helpers.sh`, and `tests/git-config-helpers.sh` (fixture Git isolation from the host's global and system configuration, already sourced by `tests/lib.sh` and `tests/herdr-test-safety.sh`; a suite that sources neither must source it itself before its first Git operation so a direct invocation stays isolated).
-Source those instead of copying a fake toolchain into a new suite.
-A fixture may shorten a production timeout to keep a failure path prompt, but never below what the real work inside that window costs on a loaded machine: a fork, an exec, a lock acquisition, a beacon publication, or a first-poll check.
-Where a case's assertion is not about the timeout itself, give that window headroom over the measured loaded cost, and bound the test's own waiting with iteration-counted poll loops, which stretch under load where a wall-clock budget does not.
-Tests that need a real optional backend or an explicit opt-in (real herdr/zellij/cmux smoke tests, the live Pi regression) skip themselves and print the tool or environment gate needed to enable them, so the portable suite remains safe on machines without those tools.
-The [Herdr backend guide](docs/herdr-backend.md#destructive-lab-safety) owns the lane's isolation boundary, while [runtime backend verification](docs/verification/runtime-backends.md#herdr) owns active empirical evidence; live harness credential tests remain opt-in.
+`bin/fm-test-run.sh` 是行为套件选择、可移植 CI 泳道组成、有界并发准入、每脚本计时标记、家族总计、覆盖守卫和可选 JSON 计时工件的唯一所有者。
+其头注释和 `--help` 负责标志、家族标签、泳道和变更文件映射；本节只记录入口。
+`bin/fm-test-isolation-proof.sh` 仍是可移植候选证明和可复用家族证明装置的唯一所有者；见 `docs/fm-test-isolation-proof.md`。
+可移植分片均衡证据在 `docs/fm-test-portable-shards.md`。
+家族选择是普通的本地路径；`--all` 仅用于有意的完整回归。
+CI 在 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 中负责跨必需的可移植并行分片、可移植串行泳道的独立 runner 分片、Herdr 泳道、lint、不变量、覆盖守卫以及 stock macOS Bash 兼容性的广泛回归。
+向某个 pull request 推送新 head 会取消该 PR 仍在运行的 CI，因此只有当前 head 被验证；推到 `main` 的推送永不取消，workflow 负责该契约及其理由。
+在本地复现某条泳道时，用 `bin/fm-test-run.sh --list-lanes` 获取确切泳道名，用 `--help` 了解 `--jobs` 规则和所需的门禁跳过标志。
+不要动各套件有界条件等待里的 `sleep 0.1` 节奏。
+这些 sleep 看似可回收的开销 - 仅 `fm-watch-triage.test.sh` 就发出约 1,900 次，每次在 macOS 上支付约 100ms 的固定调度唤醒罚金 - 但它们不是加到时钟上的开销；它们是一个测试等待某个只在 `fm-watch.sh` 自己的一秒 `FM_POLL` 节奏上移动的主体时的方式。
+降低采样频率并不能消除那个等待，只会推迟发现：2026-09-03 的背靠背测量显示，把间隔提高到 0.5s 并按比例给每个样本计费，`fm-watch-triage.test.sh` 耗时 435s 和 440s，而未改动的脚本为 390s 和 393s，因为它约 40 个轮询周期等待和约 73 个进程退出等待每个最多多付半秒。
+其中一些循环还在捕捉瞬态而非等待已稳定的条件，因此更粗的采样可能恰好迈过它们所断言的状态。
+通过列出 `tests/*.test.sh` 来发现测试：每个都是名为 `<subject>.test.sh` 的自包含 bash 脚本，其头注释描述覆盖范围；把一个传给 `bin/fm-test-run.sh`，即可用规范的计时输出聚焦某个主题。
+共享测试辅助位于 `tests/lib.sh`（报告器、临时根、git 夹具）、`tests/fixtures.sh`（假工具链和 spawn 世界构建器）、`tests/wake-helpers.sh`、`tests/secondmate-helpers.sh` 和 `tests/git-config-helpers.sh`（把夹具 Git 与主机的全局和系统配置隔离，已被 `tests/lib.sh` 和 `tests/herdr-test-safety.sh` source；两者都不 source 的套件必须在第一个 Git 操作前自行 source，保证直接调用时仍是隔离的）。
+请 source 它们，而不是把假工具链复制进新套件。
+夹具可以把生产超时缩短以让失败路径及时出现，但绝不能低于该窗口内真实工作在负载机器上的成本：一次 fork、一次 exec、一次锁获取、一次信标发布或一次首轮轮询检查。
+当用例的断言与超时本身无关时，给那个窗口留出高于实测负载成本的余量，并用按迭代计数的轮询循环约束测试自身的等待，它会在负载下自然拉长，而墙时钟预算不会。
+需要真实可选后端或显式选择加入的测试（真实 herdr/zellij/cmux 冒烟测试、live Pi 回归）会自行跳过，并打印启用所需的工具或环境门，因此可移植套件在没有这些工具的机器上仍然安全。
+[Herdr 后端指南](docs/herdr-backend.md#destructive-lab-safety)负责该泳道的隔离边界，[运行后端验证](docs/verification/runtime-backends.md#herdr)负责活跃实证证据；live harness 凭证测试保持选择加入。
 
-## Questions
+## 提问
 
-Open an issue, or talk to me on [Discord](https://discord.gg/Wsy2NpnZDu).
+开一个 issue，或在 [Discord](https://discord.gg/Wsy2NpnZDu) 上找我聊。
