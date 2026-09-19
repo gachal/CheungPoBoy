@@ -3,7 +3,7 @@ name: harness-adapters
 description: >-
   Agent-only reference for firstmate harness operations.
   Use before spawning or recovering a crewmate or secondmate, handling a trust dialog, sending a harness-specific skill invocation, interrupting or exiting an agent, resuming an exited agent, or verifying a new harness adapter.
-  Contains verified facts for claude, codex, opencode, pi, pi-signed, grok, kimi, cursor, gemini, muse, rovo, omp, and agy.
+  This fork dispatches only on codex, zcode, qoder, and codebuddy; their references record live-verification status, and upstream's wider adapter facts remain for the machinery still on disk.
 user-invocable: false
 metadata:
   internal: true
@@ -25,7 +25,9 @@ Operational paths keep the context named by their owner: `config/` and active-ho
 ## Non-negotiable safety
 
 Never dispatch a crewmate or secondmate on an unverified adapter.
-If `config/crew-harness` or `config/secondmate-harness` names one, tell the captain under `../../../AGENTS.md` section 9 that the requested worker runtime is not verified, use firstmate's own verified runtime for current work, and ask only whether to verify the requested runtime for future work.
+This fork's spawn gate in `../../../bin/fm-spawn.sh` refuses every harness outside `codex`, `zcode`, `qoder`, and `codebuddy` at both selection paths, so a name outside that set is not a dispatch choice here at all; the raw-launch escape hatch is never a supported harness.
+Of the four, only `codex` is live-verified; `zcode`, `qoder`, and `codebuddy` are adapted from their verified CLI surfaces with pane-level live verification pending, so treat any pane-level behavior their references mark unverified as a blocker to escalate, not an assumption to act on.
+If `config/crew-harness` or `config/secondmate-harness` names one outside the set, tell the captain under `../../../AGENTS.md` section 9 that the requested worker runtime is not supported by this fork, use firstmate's own supported runtime for current work, and ask only whether to adapt or verify the requested runtime for future work.
 Do not pause current work for that choice.
 
 On `unknown`, ask the captain instead of guessing.
@@ -35,7 +37,7 @@ For recovery and control, use the exact `harness=` in `state/<id>.meta`; never i
 Deliver lifecycle actions only through `../../../bin/fm-control.sh <task-id> interrupt|exit|relaunch`.
 Never type an interrupt key or exit command through `fm-send`, where routing-marked lifecycle text becomes chat.
 Trust handling is complete only when inspection proves the target started processing its instructions; delivery success alone is not proof.
-Muse, Gemini, and AGY are verified only for crewmate and scout work, never a secondmate or primary.
+Muse, Gemini, and AGY are verified only for crewmate and scout work, never a secondmate or primary; zcode, qoder, and codebuddy are likewise crewmate and scout only in this fork, and `fm-spawn.sh` refuses each of them for a secondmate until a primary supervision protocol exists.
 
 ## Detection
 
@@ -83,8 +85,11 @@ A new tool remains undispatchable until the `verify` plan, its harness entry, ev
     "verify": {"default": ["references/common/dispatch.md", "references/common/control-and-recovery.md", "references/common/primary-hooks.md", "references/common/model-and-effort.md"]}
   },
   "harnesses": {
-    "claude": "references/harness/claude.md",
     "codex": "references/harness/codex.md",
+    "zcode": "references/harness/zcode.md",
+    "qoder": "references/harness/qoder.md",
+    "codebuddy": "references/harness/codebuddy.md",
+    "claude": "references/harness/claude.md",
     "opencode": "references/harness/opencode.md",
     "pi": "references/harness/pi.md",
     "pi-signed": "references/harness/pi.md",

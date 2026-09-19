@@ -40,7 +40,10 @@ fm_agent_process_classify_name() {  # <path> [argv0] -> agent|shell|other
     # omp (Oh My Pi) is anchored for the same reason as muse: its live process
     # name is the bare word `omp` (verified, omp 18.1.11) and a glob would claim
     # unrelated commands such as ompd or comp.
-    *claude*|*codex*|*opencode*|*grok*|*kimi*|*rovo*|pi|pi-signed|pi-launcher|Pi|omp) printf 'agent' ;;
+    # zcode's live host/CLI process names are zcode-host-local-1, zcode-cli,
+    # and ZCode (verified live, ZCode 3.12.3), qoder and codebuddy run under
+    # their bare CLI names, so all four join the glob family above.
+    *claude*|*codex*|*opencode*|*grok*|*kimi*|*rovo*|*zcode*|ZCode|*qoder*|*codebuddy*|pi|pi-signed|pi-launcher|Pi|omp) printf 'agent' ;;
     # agy (Antigravity CLI) is anchored for the same reason as muse and omp: its
     # live process name is the bare word `agy` (verified, agy 1.2.0: a Go-compiled
     # single binary, comm=agy with argv[0]=agy), and a glob would claim

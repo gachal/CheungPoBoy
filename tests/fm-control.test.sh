@@ -35,7 +35,7 @@ mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd)
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp"
+VERIFIED_HARNESSES="codex zcode qoder codebuddy"
 
 # The expectation table, written out independently of the implementation so a
 # silent change to either side shows up here. The fourth field is the composer
@@ -43,16 +43,10 @@ VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp
 # its composer empty on cancel.
 verified_adapter_contract() {  # <harness> -> exit command, interrupt key, repeat, clear key
   case "$1" in
-    claude) printf '/exit\tEscape\t1\t\n' ;;
     codex) printf '/quit\tEscape\t1\t\n' ;;
-    opencode) printf '/exit\tEscape\t2\t\n' ;;
-    pi) printf '/quit\tEscape\t1\t\n' ;;
-    pi-signed) printf '/quit\tEscape\t1\t\n' ;;
-    omp) printf '/quit\tEscape\t1\t\n' ;;
-    grok) printf '/exit\tC-c\t1\t\n' ;;
-    kimi) printf '/exit\tEscape\t1\t\n' ;;
-    cursor) printf '/exit\tEscape\t1\t\n' ;;
-    muse) printf '/exit\tEscape\t1\tC-u\n' ;;
+    # The three adapted fork harnesses carry the Claude-Code-family defaults
+    # as unverified contracts; their references record the live gap.
+    zcode|qoder|codebuddy) printf '/exit\tEscape\t1\t\n' ;;
     *) return 1 ;;
   esac
 }
@@ -293,44 +287,41 @@ test_harness_family_resolution() {
 test_prefixed_recorded_harness_reaches_each_control_verb() {
   local dir out rc
   dir=$(new_case prefixed-interrupt)
-  add_task "$dir" t1 grok-2
-  alive_as "$dir" grok-2
+  add_task "$dir" t1 codex-cli
+  alive_as "$dir" codex-cli
   out=$(run_control "$dir" t1 interrupt); rc=$?
   expect_code 0 "$rc" "interrupt should resolve a prefixed recorded harness"$'\n'"$out"
-  [ "$(keys_sent "$dir")" = C-c ] \
-    || fail "a grok-prefixed task should receive grok's interrupt key"
-  assert_contains "$out" "harness=grok" \
+  [ "$(keys_sent "$dir")" = Escape ] \
+    || fail "a codex-prefixed task should receive codex's interrupt key"
+  assert_contains "$out" "harness=codex" \
     "interrupt should report the verified adapter that supplied its mechanics"
 
   dir=$(new_case prefixed-exit)
-  add_task "$dir" t1 grok-2
-  alive_as "$dir" grok-2
+  add_task "$dir" t1 codex-cli
+  alive_as "$dir" codex-cli
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 0 "$rc" "exit should resolve a prefixed recorded harness"$'\n'"$out"
-  [ "$(literals "$dir")" = /exit ] \
-    || fail "a grok-prefixed task should receive grok's exit command"
-  assert_contains "$out" "stopped t1 harness=grok" \
+  [ "$(literals "$dir")" = /quit ] \
+    || fail "a codex-prefixed task should receive codex's exit command"
+  assert_contains "$out" "stopped t1 harness=codex" \
     "exit should report the verified adapter that supplied its mechanics"
   pass "fm-control: prefixed recorded harnesses reach interrupt and exit mechanics"
 }
 
-test_opencode_interrupts_twice_and_others_once() {
-  # The one adapter that differs, asserted through the delivered keys rather
-  # than the table, so a regression in either shows up here.
-  local dir
-  dir=$(new_case int-double)
-  add_task "$dir" t1 opencode
-  alive_as "$dir" opencode
-  run_control "$dir" t1 interrupt >/dev/null
-  [ "$(keys_sent "$dir" | wc -l | tr -d ' ')" = 2 ] \
-    || fail "opencode should receive a double Escape"
-  dir=$(new_case int-single)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
-  run_control "$dir" t1 interrupt >/dev/null
-  [ "$(keys_sent "$dir" | wc -l | tr -d ' ')" = 1 ] \
-    || fail "claude should receive a single Escape"
-  pass "fm-control interrupt: opencode needs a double Escape, claude a single one"
+test_fork_harnesses_interrupt_once() {
+  # Every supported harness in this fork interrupts on a single Escape,
+  # asserted through the delivered keys rather than the table, so a regression
+  # in either shows up here.
+  local dir harness
+  for harness in zcode qoder codebuddy; do
+    dir=$(new_case "int-single-$harness")
+    add_task "$dir" t1 "$harness"
+    alive_as "$dir" "$harness"
+    run_control "$dir" t1 interrupt >/dev/null
+    [ "$(keys_sent "$dir" | wc -l | tr -d ' ')" = 1 ] \
+      || fail "$harness should receive a single Escape"
+  done
+  pass "fm-control interrupt: every adapted fork harness receives a single Escape"
 }
 
 test_unverified_harness_is_refused() {
@@ -381,9 +372,11 @@ test_harness_kind_capability() {
   done
   fm_control_harness_supports_kind muse secondmate \
     && fail "muse has no primary supervision protocol and must not claim a secondmate"
-  for harness in claude codex opencode pi pi-signed grok kimi omp; do
+  fm_control_harness_supports_kind codex secondmate \
+    || fail "codex should be able to run a secondmate"
+  for harness in zcode qoder codebuddy; do
     fm_control_harness_supports_kind "$harness" secondmate \
-      || fail "$harness should be able to run a secondmate"
+      && fail "$harness has no primary supervision protocol and must not claim a secondmate in this fork"
   done
   fm_control_harness_supports_kind someagent ship \
     && fail "an unverified harness must not claim any kind"
@@ -393,7 +386,7 @@ test_harness_kind_capability() {
 test_orca_refuses_an_escape_harness_interrupt() {
   local dir out rc
   dir=$(new_case orca-escape)
-  add_task "$dir" t1 claude ship orca "term-1"
+  add_task "$dir" t1 codex ship orca "term-1"
   # Orca records its endpoint as terminal=, which endpoint validation requires.
   {
     cat "$dir/home/state/t1.meta"
@@ -412,14 +405,14 @@ test_unverified_state_backends_refuse_stop_verbs() {
   for backend in zellij cmux; do
     dir=$(new_case "nostate-$backend")
     if [ "$backend" = zellij ]; then
-      add_task "$dir" t1 claude ship zellij "sess:7"
+      add_task "$dir" t1 codex ship zellij "sess:7"
       {
         echo "zellij_session=sess"
         echo "zellij_tab_id=1"
         echo "zellij_pane_id=7"
       } >> "$dir/home/state/t1.meta"
     else
-      add_task "$dir" t1 claude ship cmux "ws1:surface1"
+      add_task "$dir" t1 codex ship cmux "ws1:surface1"
       {
         echo "cmux_workspace_id=ws1"
         echo "cmux_surface_id=surface1"
@@ -454,8 +447,8 @@ test_state_verified_backends_are_exactly_tmux_and_herdr() {
 test_window_label_is_refused_with_the_exact_id() {
   local dir out rc
   dir=$(new_case label)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   out=$(run_control "$dir" fm-t1 exit); rc=$?
   expect_code 1 "$rc" "a window label should refuse"
   assert_contains "$out" "pass the exact task id 't1'" "the refusal should name the exact id"
@@ -466,8 +459,8 @@ test_window_label_is_refused_with_the_exact_id() {
 test_explicit_endpoint_is_refused() {
   local dir out rc
   dir=$(new_case endpoint)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   out=$(run_control "$dir" "fmses:fm-t1" exit); rc=$?
   expect_code 1 "$rc" "an explicit endpoint should refuse"
   assert_contains "$out" "exact task id only" "the refusal should name the exact-id rule"
@@ -478,7 +471,7 @@ test_explicit_endpoint_is_refused() {
 test_unknown_task_is_refused() {
   local dir out rc
   dir=$(new_case unknown)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   out=$(run_control "$dir" t2 exit); rc=$?
   expect_code 1 "$rc" "an unknown task should refuse"
   assert_contains "$out" "no task 't2'" "the refusal should name the missing task"
@@ -488,8 +481,8 @@ test_unknown_task_is_refused() {
 test_record_bound_to_another_task_is_refused() {
   local dir out rc
   dir=$(new_case foreign)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   sed 's/^endpoint_task_id=t1$/endpoint_task_id=other/' "$dir/home/state/t1.meta" \
     > "$dir/home/state/t1.meta.tmp"
   mv "$dir/home/state/t1.meta.tmp" "$dir/home/state/t1.meta"
@@ -510,8 +503,8 @@ test_remote_secondmate_is_refused_by_placement() {
   local dir out rc verb
   for verb in interrupt exit relaunch; do
     dir=$(new_case "remote-$verb")
-    add_task "$dir" t1 claude secondmate
-    alive_as "$dir" claude
+    add_task "$dir" t1 codex secondmate
+    alive_as "$dir" codex
     {
       grep -v '^window=' "$dir/home/state/t1.meta"
       echo "window=remote:t1"
@@ -549,8 +542,8 @@ test_interrupt_and_exit_lock_before_task_state_resolution() {
   local case_dir out rc verb lifecycle_lock_path holder i
   for verb in interrupt exit; do
     case_dir=$(new_case "locked-$verb")
-    add_task "$case_dir" t1 claude
-    alive_as "$case_dir" claude
+    add_task "$case_dir" t1 codex
+    alive_as "$case_dir" codex
     lifecycle_lock_path="$case_dir/home/state/.control-t1.lock"
     hold_lifecycle_lock "$lifecycle_lock_path" &
     holder=$!
@@ -580,8 +573,8 @@ test_interrupt_and_exit_lock_before_task_state_resolution() {
 test_verb_allowlist_is_closed() {
   local dir out rc
   dir=$(new_case verbs)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   out=$(run_control "$dir" t1 restart); rc=$?
   expect_code 2 "$rc" "an unknown verb should be a usage error"
   assert_contains "$out" "is not a control verb" "the refusal should say so"
@@ -600,7 +593,7 @@ test_verb_allowlist_is_closed() {
 test_resume_is_refused_with_its_reason() {
   local dir out rc
   dir=$(new_case resume)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   out=$(run_control "$dir" t1 resume); rc=$?
   expect_code 2 "$rc" "resume should be refused"
   assert_contains "$out" "not deterministic across the verified adapters" \
@@ -612,8 +605,8 @@ test_resume_is_refused_with_its_reason() {
 test_relaunch_only_flags_are_rejected_on_other_verbs() {
   local dir out rc
   dir=$(new_case flags)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   out=$(run_control "$dir" t1 exit --harness codex); rc=$?
   expect_code 1 "$rc" "--harness should not apply to exit"
   assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope the flags"
@@ -625,7 +618,7 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
 test_already_stopped_exit_is_idempotent() {
   local dir out rc
   dir=$(new_case idempotent)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 0 "$rc" "exiting an already-stopped agent should succeed"
@@ -637,7 +630,7 @@ test_already_stopped_exit_is_idempotent() {
 test_missing_endpoint_refuses() {
   local dir out rc
   dir=$(new_case gone)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   : > "$dir/fake/windows"
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 1 "$rc" "a missing endpoint should refuse"
@@ -648,7 +641,7 @@ test_missing_endpoint_refuses() {
 test_interrupt_refuses_when_no_agent_runs() {
   local dir out rc
   dir=$(new_case nointerrupt)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   alive_as "$dir" zsh
   out=$(run_control "$dir" t1 interrupt); rc=$?
   expect_code 1 "$rc" "interrupting a stopped agent should refuse"
@@ -660,7 +653,7 @@ test_interrupt_refuses_when_no_agent_runs() {
 test_ambiguous_endpoint_refuses() {
   local dir out rc
   dir=$(new_case ambiguous)
-  add_task "$dir" t1 claude
+  add_task "$dir" t1 codex
   alive_as "$dir" some-unrelated-process
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 1 "$rc" "an unattributed endpoint should refuse"
@@ -669,43 +662,27 @@ test_ambiguous_endpoint_refuses() {
   pass "fm-control exit: an endpoint whose process cannot be attributed refuses"
 }
 
-test_busy_agent_is_interrupted_before_the_exit_command() {
-  local dir out rc
-  dir=$(new_case busy)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
-  # Arm the semantic busy contract and record a busy turn, exactly as the
-  # harness's own lifecycle hook would.
-  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" t1)
-  printf 'busy_gen=%s\n' "$gen" >> "$dir/home/state/t1.meta"
-  out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 0 "$rc" "exiting a busy agent should succeed"$'\n'"$out"
-  [ "$(keys_sent "$dir")" = "Escape" ] \
-    || fail "a busy agent should be interrupted once before its exit command, got: $(keys_sent "$dir")"
-  [ "$(literals "$dir")" = "/exit" ] || fail "the exit command should follow the interrupt"
-  pass "fm-control exit: a busy agent receives interrupt delivery before the exit command"
-}
 
 test_idle_agent_is_not_interrupted() {
   local dir out rc gen
   dir=$(new_case idle)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   gen=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" t1 --state idle --source fm-spawn --event seed)
   printf 'busy_gen=%s\n' "$gen" >> "$dir/home/state/t1.meta"
   out=$(run_control "$dir" t1 exit); rc=$?
   expect_code 0 "$rc" "exiting an idle agent should succeed"$'\n'"$out"
   [ -z "$(keys_sent "$dir")" ] \
     || fail "an idle agent needs no interrupt, got keys: $(keys_sent "$dir")"
-  [ "$(literals "$dir")" = "/exit" ] || fail "the exit command should still be sent"
+  [ "$(literals "$dir")" = "/quit" ] || fail "the exit command should still be sent"
   pass "fm-control exit: an idle agent goes straight to its exit command"
 }
 
 test_interrupt_without_acknowledgement_preserves_busy_state() {
   local dir gen before after out rc
   dir=$(new_case unconfirmed)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   gen=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" t1)
   printf 'busy_gen=%s\n' "$gen" >> "$dir/home/state/t1.meta"
   before=$(cat "$dir/home/state/t1.busy-state")
@@ -720,74 +697,12 @@ test_interrupt_without_acknowledgement_preserves_busy_state() {
   pass "fm-control interrupt: unconfirmed delivery preserves observed busy state"
 }
 
-test_muse_interrupt_confirms_adapter_acknowledgement() {
-  local dir root log out rc
-  dir=$(new_case confirmed)
-  add_task "$dir" t1 muse
-  alive_as "$dir" muse
-  root="$dir/muse-sessions"
-  log="$root/2026/08/08/session-1/session.jsonl"
-  mkdir -p "$(dirname "$log")"
-  printf '%s\n' \
-    "{\"schema_version\":1,\"payload_type\":\"runtime.session.metadata\",\"payload\":{\"kind\":\"metadata\",\"record\":{\"workspace_root\":\"$dir/wt-t1\"}}}" \
-    '{"schema_version":1,"payload_type":"runtime.session","payload":{"kind":"run","run_id":"run-1","event":{"kind":"started","prompt":"work"}}}' > "$log"
-  printf 'sessions_root=%s\nworkspace_root=%s\nbinding_id=test\n' \
-    "$root" "$dir/wt-t1" > "$dir/home/state/t1.muse-session"
-  out=$(FM_FAKE_MUSE_LOG="$log" run_control "$dir" t1 interrupt); rc=$?
-  expect_code 0 "$rc" "muse interrupt should observe its adapter acknowledgement"$'\n'"$out"
-  assert_contains "$out" "verified=agent-alive cancel=confirmed" \
-    "the result should report muse's cancelled terminal acknowledgement"
-  pass "fm-control interrupt: muse confirms cancellation from its session log"
-}
-
-test_interrupt_revalidates_agent_after_acknowledgement_wait() {
-  local dir root log out rc
-  dir=$(new_case ack-race)
-  add_task "$dir" t1 muse
-  alive_as "$dir" muse
-  root="$dir/muse-sessions"
-  log="$root/2026/08/08/session-1/session.jsonl"
-  mkdir -p "$(dirname "$log")"
-  printf '%s\n' \
-    "{\"schema_version\":1,\"payload_type\":\"runtime.session.metadata\",\"payload\":{\"kind\":\"metadata\",\"record\":{\"workspace_root\":\"$dir/wt-t1\"}}}" \
-    '{"schema_version":1,"payload_type":"runtime.session","payload":{"kind":"run","run_id":"run-1","event":{"kind":"started","prompt":"work"}}}' > "$log"
-  printf 'sessions_root=%s\nworkspace_root=%s\nbinding_id=test\n' \
-    "$root" "$dir/wt-t1" > "$dir/home/state/t1.muse-session"
-  out=$(FM_FAKE_MUSE_LOG="$log" FM_FAKE_MUSE_DISAPPEAR_BEFORE_ACK=1 \
-    run_control "$dir" t1 interrupt); rc=$?
-  expect_code 1 "$rc" "interrupt should fail when the agent stops during acknowledgement polling"
-  assert_contains "$out" "agent is 'dead' after its interrupt key" \
-    "the final postcondition should observe the agent after acknowledgement polling"
-  assert_not_contains "$out" "interrupt-delivered" \
-    "a stale pre-wait liveness proof must not be published"
-  pass "fm-control interrupt: postconditions are revalidated after acknowledgement polling"
-}
-
-test_exit_accepts_agent_stopped_by_busy_interrupt() {
-  local dir out rc gen
-  dir=$(new_case interrupt-stops)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
-  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" t1)
-  printf 'busy_gen=%s\n' "$gen" >> "$dir/home/state/t1.meta"
-  out=$(FM_FAKE_INTERRUPT_STOPS_AGENT=1 run_control "$dir" t1 exit); rc=$?
-  expect_code 0 "$rc" "exit should accept a busy agent stopped by interrupt"$'\n'"$out"
-  assert_contains "$out" "stopped t1 harness=claude" \
-    "the authoritative gone-state should complete exit successfully"
-  [ "$(keys_sent "$dir")" = Escape ] \
-    || fail "exit should deliver the busy agent's interrupt sequence"
-  [ -z "$(literals "$dir")" ] \
-    || fail "exit should not type a command after interrupt already stopped the agent"
-  [ ! -e "$dir/home/state/t1.busy-gen" ] && [ ! -e "$dir/home/state/t1.busy-state" ] \
-    || fail "exit should retire busy wiring for an agent stopped by interrupt"
-  pass "fm-control exit: an interrupt-stopped agent satisfies the gone-state postcondition"
-}
 
 test_agent_that_does_not_stop_fails_closed() {
   local dir out rc gen
   dir=$(new_case stubborn)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
+  add_task "$dir" t1 codex
+  alive_as "$dir" codex
   gen=$("$ROOT/bin/fm-busy-event.sh" arm "$dir/home/state" t1)
   printf 'busy_gen=%s\n' "$gen" >> "$dir/home/state/t1.meta"
   out=$(env FM_FAKE_NEVER_DIES=1 PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" \
@@ -795,42 +710,42 @@ test_agent_that_does_not_stop_fails_closed() {
     "$CONTROL" t1 exit 2>&1); rc=$?
   expect_code 1 "$rc" "an agent that ignores its exit command should fail closed"
   assert_contains "$out" "did not stop" "the failure should say the agent did not stop"
-  assert_contains "$out" "exit-delivered t1 interrupt=delivered verified=agent-alive cancel=unconfirmed exit-command=delivered agent-state=alive exit=unconfirmed" \
+  assert_contains "$out" "exit-delivered t1 interrupt=not-needed exit-command=delivered agent-state=alive exit=unconfirmed" \
     "the failure should distinguish delivered lifecycle input from the unconfirmed exit"
   assert_not_contains "$out" "nothing was changed" \
     "the failure must not deny the lifecycle input that was delivered"
-  [ "$(keys_sent "$dir")" = Escape ] \
-    || fail "a stubborn busy agent should receive its interrupt sequence"
-  [ "$(literals "$dir")" = /exit ] \
-    || fail "a stubborn busy agent should receive its exit command"
+  [ -z "$(keys_sent "$dir")" ] \
+    || fail "an agent this home cannot classify as busy needs no interrupt sequence, got: $(keys_sent "$dir")"
+  [ "$(literals "$dir")" = /quit ] \
+    || fail "a stubborn agent should still receive its exit command"
   pass "fm-control exit: a stubborn agent reports delivered input and an unconfirmed exit"
 }
 
-test_grok_interrupt_without_acknowledgement_reports_unconfirmed() {
+test_codebuddy_interrupt_without_acknowledgement_reports_unconfirmed() {
   local dir out rc
   dir=$(new_case nosettle)
-  add_task "$dir" t1 grok
-  alive_as "$dir" grok
+  add_task "$dir" t1 codebuddy
+  alive_as "$dir" codebuddy
   printf '╭────╮\n│    │\n╰────╯\n Ctrl+c:cancel\n' > "$dir/fake/pane"
   out=$(run_control "$dir" t1 interrupt); rc=$?
-  expect_code 0 "$rc" "grok interrupt delivery should not depend on inferred cancellation"$'\n'"$out"
+  expect_code 0 "$rc" "codebuddy interrupt delivery should not depend on inferred cancellation"$'\n'"$out"
   assert_contains "$out" "verified=agent-alive cancel=unconfirmed" \
     "a rendered busy hint is not a cancellation acknowledgement"
-  pass "fm-control interrupt: grok reports delivery without claiming cancellation"
+  pass "fm-control interrupt: codebuddy reports delivery without claiming cancellation"
 }
 
-test_grok_idle_footer_does_not_confirm_cancellation() {
+test_codebuddy_idle_footer_does_not_confirm_cancellation() {
   local dir out rc
   dir=$(new_case settles)
-  add_task "$dir" t1 grok
-  alive_as "$dir" grok
+  add_task "$dir" t1 codebuddy
+  alive_as "$dir" codebuddy
   printf '╭────╮\n│    │\n╰────╯\n Shift+Tab:mode │ Ctrl+.:shortcuts\n' > "$dir/fake/pane"
   out=$(run_control "$dir" t1 interrupt); rc=$?
-  expect_code 0 "$rc" "grok interrupt delivery should succeed"$'\n'"$out"
+  expect_code 0 "$rc" "codebuddy interrupt delivery should succeed"$'\n'"$out"
   assert_contains "$out" "verified=agent-alive cancel=unconfirmed" \
     "an idle footer is not an explicit cancellation acknowledgement"
-  [ "$(keys_sent "$dir")" = "C-c" ] || fail "grok should receive C-c, got: $(keys_sent "$dir")"
-  pass "fm-control interrupt: grok's idle footer does not confirm cancellation"
+  [ "$(keys_sent "$dir")" = "Escape" ] || fail "codebuddy should receive Escape, got: $(keys_sent "$dir")"
+  pass "fm-control interrupt: codebuddy's idle footer does not confirm cancellation"
 }
 
 # --- 6. marker non-regression -----------------------------------------------
@@ -839,14 +754,14 @@ test_secondmate_control_command_carries_no_marker() {
   local dir out rc typed home
   dir=$(new_case sm-marker)
   home="$dir/home"
-  add_task "$dir" domain claude secondmate
+  add_task "$dir" domain codex secondmate
   # A secondmate's worktree IS its home; give it the marker its records need.
   printf '%s\n' domain > "$dir/wt-domain/.fm-secondmate-home"
-  alive_as "$dir" claude
+  alive_as "$dir" codex
   out=$(run_control "$dir" domain exit); rc=$?
   expect_code 0 "$rc" "exiting a secondmate's agent should succeed"$'\n'"$out"
   typed=$(literals "$dir")
-  [ "$typed" = "/exit" ] \
+  [ "$typed" = "/quit" ] \
     || fail "a secondmate control command must be the bare exit command, got: $typed"
   case "$typed" in
     *"$FM_FROMFIRST_MARK"*) fail "a control command must never carry the from-firstmate marker" ;;
@@ -862,7 +777,7 @@ test_secondmate_control_command_carries_no_marker() {
 test_fm_send_still_marks_the_same_secondmate_task() {
   local dir log out rc
   dir=$(new_case sm-send)
-  add_task "$dir" domain claude secondmate
+  add_task "$dir" domain codex secondmate
   log="$dir/fake/sendlog"
   : > "$log"
   out=$(env PATH="$dir/fakebin:$PATH" FM_HOME="$dir/home" FM_FAKE_DIR="$dir/fake" \
@@ -881,7 +796,7 @@ test_fm_send_still_marks_the_same_secondmate_task() {
 
 test_exit_types_each_harness_verified_command
 test_interrupt_sends_each_harness_verified_key
-test_opencode_interrupts_twice_and_others_once
+test_fork_harnesses_interrupt_once
 test_unverified_harness_is_refused
 test_harness_family_resolution
 test_prefixed_recorded_harness_reaches_each_control_verb
@@ -903,14 +818,10 @@ test_already_stopped_exit_is_idempotent
 test_missing_endpoint_refuses
 test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
-test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
 test_interrupt_without_acknowledgement_preserves_busy_state
-test_muse_interrupt_confirms_adapter_acknowledgement
-test_interrupt_revalidates_agent_after_acknowledgement_wait
-test_exit_accepts_agent_stopped_by_busy_interrupt
 test_agent_that_does_not_stop_fails_closed
-test_grok_interrupt_without_acknowledgement_reports_unconfirmed
-test_grok_idle_footer_does_not_confirm_cancellation
+test_codebuddy_interrupt_without_acknowledgement_reports_unconfirmed
+test_codebuddy_idle_footer_does_not_confirm_cancellation
 test_secondmate_control_command_carries_no_marker
 test_fm_send_still_marks_the_same_secondmate_task

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Detect the agent harness this process tree runs on.
-# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|unknown
+# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|zcode|unknown
 #        fm-harness.sh crew             print the effective CREWMATE harness
 #                                        (config/crew-harness; "default" resolves to own)
 #        fm-harness.sh secondmate       print the harness the PRIMARY uses to launch
@@ -102,6 +102,15 @@ harness_marker() {
   # additionally clears foreign markers at rovo's launch boundary as defense in depth.
   [ "${ATLASSIAN_AGENT_TYPE:-}" = "rovo" ] && { echo rovo; return; }
   [ "${ROVODEV_CLI:-}" = "1" ] && { echo rovo; return; }
+  # zcode (ZCode desktop app and its bundled zcode CLI) publishes a ZCODE_*
+  # environment family to its tool subprocesses (verified live from a real
+  # ZCode 3.12.3 desktop session on 2026-09-17: a tool subprocess carried
+  # ZCODE_APP_VERSION, ZCODE_BASE_URL, ZCODE_ENV, and ZCODE_PROCESS_LABEL
+  # together, and none of them appears in a non-zcode launch environment).
+  # Tested before CLAUDECODE for the same reason cursor, gemini, and rovo are:
+  # nothing verifies zcode clears an inherited claude marker, so ordering is
+  # what decides when ancestry finds nothing to arbitrate with.
+  [ -n "${ZCODE_APP_VERSION:-}" ] && { echo zcode; return; }
   # omp (Oh My Pi) publishes NO harness-identity marker of its own: verified on
   # omp 18.1.11 that PI_CODING_AGENT is absent from the binary and that the
   # default profile sets neither PI_CODING_AGENT_DIR nor OMP_PROFILE in the
@@ -218,6 +227,13 @@ harness_process_verdict() {  # <pid>
     # optional claude-bridge extension runs a nested executable literally
     # named `claude` with its own node child, and that fallback's *claude*
     # args glob would otherwise claim it if that subtree were ever walked.
+    # zcode's live process tree names its host, CLI, and desktop-app processes
+    # zcode-host-local-1, zcode-cli, and ZCode (verified live from a real
+    # ZCode 3.12.3 desktop session on 2026-09-17: the parent walk from a tool
+    # subprocess reached zcode-cli under zcode-host-local-1 under ZCode).
+    # Anchored names plus the zcode-host- prefix so unrelated commands cannot
+    # misread as this harness.
+    zcode|zcode-cli|zcode-host-*|ZCode) echo "comm zcode"; return ;;
     omp) echo "comm omp"; return ;;
     # agy (Antigravity CLI) is a Go-compiled single binary whose process name
     # is exactly `agy` (verified, agy 1.2.0: `ps -o comm=` reports agy and
@@ -240,6 +256,7 @@ harness_process_verdict() {  # <pid>
         *codex*) echo "args codex"; return ;;
         *opencode*) echo "args opencode"; return ;;
         *grok*) echo "args grok"; return ;;
+        *zcode.cjs*) echo "args zcode"; return ;;
         *" pi "*|*/pi) echo "args pi"; return ;;
       esac ;;
   esac

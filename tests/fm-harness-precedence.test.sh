@@ -29,7 +29,7 @@ set -u
 
 # This suite states the markers it means to test in every case. Drop the ambient
 # ones so a verdict never depends on which harness launched the suite.
-unset CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT CURSOR_AGENT CURSOR_INVOKED_AS
+unset CLAUDECODE PI_CODING_AGENT FM_PI_HARNESS GROK_AGENT CURSOR_AGENT CURSOR_INVOKED_AS ZCODE_APP_VERSION
 
 HARNESS="$ROOT/bin/fm-harness.sh"
 RENDER="$ROOT/bin/fm-supervision-instructions.sh"
@@ -746,6 +746,41 @@ test_supervision_protocol_follows_corrected_verdict() {
   pass "session start renders the Codex protocol for a Codex primary holding a retained CLAUDECODE"
 }
 
+# --- 8. zcode: a marker-and-ancestry pair verified live in this fork ----------
+
+# ZCode publishes the ZCODE_* marker family to tool subprocesses, and its live
+# process tree names the host and CLI processes zcode-host-local-1 and zcode-cli
+# (verified live, ZCode 3.12.3, 2026-09-17). Both layers must answer alone and
+# agree, and a retained CLAUDECODE must not rename a zcode tree whose own marker
+# is absent, because nothing verifies zcode clears an inherited claude marker.
+test_zcode_marker_and_ancestry() {
+  local dir fakebin bin got
+  dir="$TMP_ROOT/zcode"
+  fakebin=$(blind_ancestry_bin "$dir/blind")
+
+  got=$(with_blind_ancestry "$fakebin" ZCODE_APP_VERSION=3.12.3)
+  [ "$got" = zcode ] \
+    || fail "ZCODE_APP_VERSION alone with no ancestry resolved '$got', expected zcode (the marker signal is not live)"
+
+  bin=$(named_bin "$dir/zcode-cli-tree" zcode-cli)
+  got=$(under_process "$bin")
+  [ "$got" = zcode ] \
+    || fail "zcode-cli ancestry alone resolved '$got', expected zcode"
+  got=$(under_process "$bin" CLAUDECODE=1)
+  [ "$got" = zcode ] \
+    || fail "zcode-cli ancestry with an inherited CLAUDECODE resolved '$got', expected zcode"
+  got=$(under_process "$bin" ZCODE_APP_VERSION=3.12.3)
+  [ "$got" = zcode ] \
+    || fail "zcode-cli ancestry with its own marker resolved '$got', expected zcode"
+
+  bin=$(named_bin "$dir/zcode-host-tree" zcode-host-local-1)
+  got=$(under_process "$bin" ZCODE_APP_VERSION=3.12.3)
+  [ "$got" = zcode ] \
+    || fail "zcode-host ancestry with its marker resolved '$got', expected zcode"
+
+  pass "zcode answers from its marker alone, its ancestry alone, and both together"
+}
+
 test_markerless_ancestry_outranks_foreign_marker
 test_genuine_marker_and_ancestry_agree
 test_cursor_ordering_still_decides_when_ancestry_is_silent
@@ -759,3 +794,4 @@ test_descent_probe_ignores_a_sibling_branch_the_walk_cannot_reach
 test_descent_probe_tolerates_an_args_only_foreign_verdict_at_the_deepest_vantage
 test_descent_probe_prefers_comm_strength_when_deepest_leaves_tie
 test_supervision_protocol_follows_corrected_verdict
+test_zcode_marker_and_ancestry

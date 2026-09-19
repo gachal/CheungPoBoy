@@ -135,10 +135,14 @@
 #   profile consultation. A --secondmate spawn is exempt and resolves the SECONDMATE
 #   harness (config/secondmate-harness -> config/crew-harness -> own), so the
 #   secondmate-vs-crewmate split is DURABLE across every respawn (recovery,
-#   /updatefirstmate, restart). A bare adapter name (claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy)
-#   overrides it for this spawn (either kind). A non-flag string containing
+#   /updatefirstmate, restart). A bare adapter name (codex|zcode|qoder|codebuddy)
+#   overrides it for this spawn (either kind). This fork supports exactly those
+#   four harnesses: both selection paths below (explicit adapter name and
+#   config resolution) refuse every other adapter name before any endpoint,
+#   worktree, or task record exists. A non-flag string containing
 #   whitespace is treated as a RAW launch command - the escape hatch for verifying
-#   new adapters. For pi and pi-signed, fm-spawn resolves the selected executable
+#   new adapters, unchanged by the fork restriction and never a supported
+#   harness. For pi and pi-signed, fm-spawn resolves the selected executable
 #   name from PATH once, probes that concrete path with --help, and launches the
 #   same path. It adds --tui-mode regular only when that help advertises the flag;
 #   a failed or inconclusive probe omits it so older Pi versions remain launchable.
@@ -1882,8 +1886,65 @@ launch_template() {
   # when a supported effort is requested, since a second --config-override
   # would silently discard the first (confirmed live).
   rovo) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __ROVOBIN__ run --yolo __MODELFLAG____ROVOCONFIGOVERRIDE__' ;;
+  # qoder (Qoder CLI): a positional prompt starts the interactive session and
+  # auto-submits it, so the brief rides the launch command exactly as it does
+  # for claude and grok. --dangerously-skip-permissions bypasses every
+  # permission check, which an unattended crewmate needs. Flag surface
+  # verified against `qoder --help` (qodercli, 2026-09-17); interactive
+  # auto-submit, busy state, and turn-end behavior are not yet verified live,
+  # so busy state rides the generic rendered-tail fallback and no turn-end
+  # hook is installed. Foreign markers are cleared by the shared wrap below
+  # because qoder has no verified ancestry signature of its own yet.
+  qoder) printf '%s' 'qoder __MODELFLAG____EFFORTFLAG__--dangerously-skip-permissions "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  # codebuddy (CodeBuddy Code CLI, Claude-Code-shaped): a positional prompt
+  # starts the interactive session. -y (--dangerously-skip-permissions)
+  # bypasses permission prompts, which an unattended crewmate needs. Flag
+  # surface verified against `codebuddy --help` (2026-09-17); interactive
+  # auto-submit, busy state, and turn-end behavior are not yet verified live,
+  # so busy state rides the generic rendered-tail fallback and no turn-end
+  # hook is installed. It exposes no reasoning-effort flag, so the effort axis
+  # is deliberately omitted and stays in task metadata only (record-and-omit).
+  # Foreign markers are cleared by the shared wrap below because codebuddy
+  # has no verified ancestry signature of its own yet.
+  codebuddy) printf '%s' 'codebuddy __MODELFLAG__-y "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  # zcode (ZCode desktop app's bundled CLI): a positional prompt opens the
+  # TUI session, and --mode's prompt default is already yolo, so no permission
+  # flag is needed (`zcode --help`, zcode 0.16.5 bundled with ZCode 3.12.3,
+  # verified 2026-09-17). The CLI has no --model and no reasoning-effort flag,
+  # so both axes are deliberately omitted and stay in task metadata only
+  # (record-and-omit). zcode's own ZCODE_* detection markers are native here
+  # and are preserved; every foreign marker is cleared by the shared wrap
+  # below. Interactive auto-submit, busy state, and turn-end behavior are not
+  # yet verified live, so busy state rides the generic rendered-tail fallback
+  # and no turn-end hook is installed. __ZCODEBIN__ resolves from PATH first
+  # and then the macOS app bundle, because ZCode installs no PATH binary.
+  zcode) printf '%s' '__ZCODEBIN__ __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   *) return 1 ;;
   esac
+}
+
+# This fork supports exactly these harnesses for every launch kind. Both
+# selection paths below (explicit adapter name and config resolution) refuse
+# anything else before any endpoint, worktree, or task record exists, so
+# upstream's wider adapter set stays reachable only through the raw-launch
+# escape hatch, which is never a supported harness.
+fm_fork_supported_harnesses() {
+  printf '%s\n' codex zcode qoder codebuddy
+}
+
+fm_fork_supported_harnesses_inline() {
+  local out='' h
+  while IFS= read -r h; do out="${out:+$out, }$h"; done < <(fm_fork_supported_harnesses)
+  printf '%s\n' "$out"
+}
+
+fm_fork_harness_supported() {  # <harness>
+  local h
+  [ -n "${1-}" ] || return 1
+  while IFS= read -r h; do
+    [ "$h" = "$1" ] && return 0
+  done < <(fm_fork_supported_harnesses)
+  return 1
 }
 
 case "$ARG3" in
@@ -1919,6 +1980,10 @@ case "$ARG3" in
     HARNESS=$("$FM_ROOT/bin/fm-harness.sh" crew)
     harness_src='config/crew-harness'
   fi
+  fm_fork_harness_supported "$HARNESS" || {
+    echo "error: harness '$HARNESS' (from $harness_src or detection) is not supported by this fork; supported: $(fm_fork_supported_harnesses_inline). A raw launch command remains the unverified-adapter escape hatch." >&2
+    exit 1
+  }
   LAUNCH=$(launch_template "$HARNESS" "$KIND") || {
     echo "error: no launch template for harness '$HARNESS' (from $harness_src or detection); pass a raw launch command to use an unverified adapter" >&2
     exit 1
@@ -1926,6 +1991,10 @@ case "$ARG3" in
   ;;
 *)
   HARNESS=$ARG3
+  fm_fork_harness_supported "$HARNESS" || {
+    echo "error: harness '$HARNESS' is not supported by this fork; supported: $(fm_fork_supported_harnesses_inline). A raw launch command remains the unverified-adapter escape hatch." >&2
+    exit 1
+  }
   LAUNCH=$(launch_template "$HARNESS" "$KIND") || {
     echo "error: unknown harness '$HARNESS'; pass a raw launch command to use an unverified adapter" >&2
     exit 1
@@ -1945,8 +2014,8 @@ esac
 # secondmate whose supervision cycle could never be armed.
 # agy has none either: it exposes no hook surface for primary supervision and
 # docs/supervision-protocols/ carries no agy wake protocol (agy 1.2.0).
-if [ "$KIND" = secondmate ] && { [ "$HARNESS" = muse ] || [ "$HARNESS" = gemini ] || [ "$HARNESS" = agy ]; }; then
-  echo "error: $HARNESS is a verified crewmate/scout adapter only and cannot run a secondmate; it has no primary supervision protocol. Select a harness verified for secondmates." >&2
+if [ "$KIND" = secondmate ] && { [ "$HARNESS" = muse ] || [ "$HARNESS" = gemini ] || [ "$HARNESS" = agy ] || [ "$HARNESS" = zcode ] || [ "$HARNESS" = qoder ] || [ "$HARNESS" = codebuddy ]; }; then
+  echo "error: $HARNESS is a crewmate/scout adapter only and cannot run a secondmate; it has no primary supervision protocol. Select codex, this fork's only secondmate-verified harness." >&2
   exit 1
 fi
 
@@ -2164,7 +2233,7 @@ model_flag_for_harness() {
   local harness=$1 model=$2
   [ -n "$model" ] && [ "$model" != default ] || return 0
   case "$harness" in
-  claude | codex | opencode | pi | pi-signed | grok | kimi | cursor | gemini | muse | rovo | omp | agy)
+  claude | codex | opencode | pi | pi-signed | grok | kimi | cursor | gemini | muse | rovo | omp | agy | qoder | codebuddy)
     printf -- '--model %s ' "$(shell_quote "$model")"
     ;;
   esac
@@ -2205,6 +2274,15 @@ effort_flag_for_harness() {
     # omitted rather than passed as known-bad values (record-and-omit).
     case "$effort" in
     low | medium | high) printf -- '--effort %s ' "$(shell_quote "$effort")" ;;
+    esac
+    ;;
+  qoder)
+    # qoder's --help exposes --reasoning-effort without enumerating its
+    # accepted levels (qodercli, 2026-09-17), so only the levels every
+    # verified reasoning-effort CLI shares are passed and higher efforts are
+    # omitted rather than passed blind (record-and-omit).
+    case "$effort" in
+    low | medium | high) printf -- '--reasoning-effort %s ' "$(shell_quote "$effort")" ;;
     esac
     ;;
   pi | pi-signed)
@@ -2249,7 +2327,9 @@ effort_flag_for_harness() {
     # kimi likewise has no reasoning-effort flag; the requested axis stays in
     # task metadata but never reaches the launch command. Cursor encodes effort
     # in model ids such as cursor-grok-4.5-high, so it also receives no separate
-    # effort flag.
+    # effort flag. codebuddy and zcode likewise expose no reasoning-effort flag
+    # (`codebuddy --help`; `zcode --help` 0.16.5), so their requested axis
+    # stays in task metadata only.
   esac
 }
 
@@ -2290,6 +2370,37 @@ case "$LAUNCH" in
 *__ROVOBIN__*)
   ROVO_BIN=$(resolve_rovo_binary) || exit 1
   LAUNCH=${LAUNCH//__ROVOBIN__/$(shell_quote "$ROVO_BIN")}
+  ;;
+esac
+
+# Resolve the zcode CLI. ZCode ships its CLI inside the desktop app bundle and
+# installs no PATH binary by default (verified 2026-09-17: ZCode 3.12.3 bundle
+# carries an executable glm/zcode.cjs reporting zcode 0.16.5), so resolution
+# tries PATH first and then the macOS bundle location, whose file is a node
+# script with a shebang and the executable bit. Refusing when neither exists
+# keeps a missing install a loud spawn refusal instead of a pane that dies on
+# command-not-found and reads as a wedged worker.
+resolve_zcode_binary() {
+  local candidate bundled=/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs
+  candidate=$(command -v zcode 2>/dev/null || true)
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if [ -x "$bundled" ]; then
+    printf '%s\n' "$bundled"
+    return 0
+  fi
+  return 1
+}
+
+case "$LAUNCH" in
+*__ZCODEBIN__*)
+  ZCODE_BIN=$(resolve_zcode_binary) || {
+    echo "error: zcode executable not found on PATH or at /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs; install the ZCode desktop app or put zcode on PATH" >&2
+    exit 1
+  }
+  LAUNCH=${LAUNCH//__ZCODEBIN__/$(shell_quote "$ZCODE_BIN")}
   ;;
 esac
 
@@ -4267,6 +4378,16 @@ agy) LAUNCH=${LAUNCH//__AGYBIN__/"$(shell_quote "$AGY_BIN")"} ;;
 esac
 LAUNCH=${LAUNCH//__WORKTREE__/$sq_worktree}
 case "$HARNESS" in
+qoder | codebuddy)
+  # Neither CLI has a verified ancestry signature in bin/fm-harness.sh yet,
+  # so every known foreign marker is cleared at the launch boundary; an
+  # inherited marker would otherwise rename these sessions in detection.
+  LAUNCH="env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u FM_OMP_HARNESS -u ZCODE_APP_VERSION $LAUNCH"
+  ;;
+zcode)
+  # zcode's own ZCODE_* markers are native and stay; only foreign ones clear.
+  LAUNCH="env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u FM_OMP_HARNESS $LAUNCH"
+  ;;
 claude | codex | opencode | pi | pi-signed | grok | kimi | gemini | muse | rovo | agy)
   LAUNCH="env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI $LAUNCH"
   ;;
