@@ -185,6 +185,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/harness-adapters/references/harness/codebuddy.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/harness-adapters/references/harness/codex.md",
       "audience": "agent-runtime"
     },
@@ -221,7 +225,15 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".agents/skills/harness-adapters/references/harness/qoder.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".agents/skills/harness-adapters/references/harness/rovo.md",
+      "audience": "agent-runtime"
+    },
+    {
+      "path": ".agents/skills/harness-adapters/references/harness/zcode.md",
       "audience": "agent-runtime"
     },
     {
